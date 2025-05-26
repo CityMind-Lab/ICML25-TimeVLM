@@ -1,0 +1,9 @@
+checkpoints
+dataset
+**/__pycache__/
+wandb/
+logs
+results
+test_results
+m4_results
+result_long_term_forecast.txt
