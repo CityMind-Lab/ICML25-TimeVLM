@@ -124,13 +124,8 @@ class LearnableTimeSeriesToImage(nn.Module):
         x_enc = self.conv1d(x_enc)  # shape [B * D, hidden_dim, L]
         x_enc = x_enc.reshape(B, D, self.hidden_dim, L)  # shape [B, D, hidden_dim, L]
 
-        # Combine the variables by averaging or summing along the D dimension
-        x_enc = x_enc.mean(dim=1)  # shape [B, hidden_dim, L]
-
-        # Add channel dimension for 2D convolution to [B, hidden_dim, 1, L]
-        x_enc = x_enc.unsqueeze(2)  # shape [B, hidden_dim, 1, L]
-
-        # 2D Convolution to convert [B, hidden_dim, 1, L] to [B, output_channels, 1, L]
+        # 2D Convolution to convert [B, hidden_dim, D, L] to [B, output_channels, D, L]
+        x_enc = x_enc.permute(0, 2, 1, 3)  # [B, D, hidden_dim, L]
         x_enc = F.relu(self.conv2d_1(x_enc))
         x_enc = F.relu(self.conv2d_2(x_enc))
         
