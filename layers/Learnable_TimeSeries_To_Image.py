@@ -11,12 +11,7 @@ class TimeSeriesVisualizer:
     
     @staticmethod
     def plot_feature_maps(features, title="Feature Maps"):
-        """
-        Plot feature maps from intermediate layers
-        Args:
-            features (torch.Tensor): Feature maps tensor of shape [B, C, H, W]
-            title (str): Plot title
-        """
+        """Plot feature maps from intermediate layers"""
         if not isinstance(features, torch.Tensor):
             return
             
@@ -27,13 +22,11 @@ class TimeSeriesVisualizer:
         # Plot first batch item
         num_channels = min(4, features.shape[1])
         if num_channels == 1:
-            # Handle single channel case
             plt.figure(figsize=(5, 5))
             plt.imshow(features[0, 0], cmap='viridis')
             plt.axis('on')
             plt.title('Channel 1')
         else:
-            # Handle multiple channels case
             fig, axes = plt.subplots(1, num_channels, figsize=(15, 5))
             for i, ax in enumerate(axes):
                 ax.imshow(features[0, i], cmap='viridis')
@@ -52,12 +45,7 @@ class TimeSeriesVisualizer:
 
     @staticmethod
     def plot_attention(attention_map, title="Attention Map"):
-        """
-        Plot attention weights
-        Args:
-            attention_map (torch.Tensor): Attention weights tensor
-            title (str): Plot title
-        """
+        """Plot attention weights"""
         if not isinstance(attention_map, torch.Tensor):
             return
             
@@ -69,9 +57,8 @@ class TimeSeriesVisualizer:
         plt.show()
 
 class LearnableTimeSeriesToImage(nn.Module):
-    """
-    Learnable module to convert time series data into image tensors.
-    """
+    """Learnable module to convert time series data into image tensors"""
+    
     def __init__(self, input_dim, hidden_dim, output_channels, image_size, periodicity):
         super(LearnableTimeSeriesToImage, self).__init__()
         self.input_dim = input_dim
@@ -80,65 +67,58 @@ class LearnableTimeSeriesToImage(nn.Module):
         self.image_size = image_size
         self.periodicity = periodicity
 
-        # 1D convolutional layer, used to transform [B, L, D] to [B, hidden_dim, L]
-        self.conv1d = nn.Conv1d(in_channels=input_dim, out_channels=hidden_dim, kernel_size=3, padding=1)
+        # 1D convolutional layer
+        self.conv1d = nn.Conv1d(in_channels=4, out_channels=hidden_dim, kernel_size=3, padding=1)
 
-        # 2D convolution layer, used to convert [B, hidden_dim, L] to [B, C, H, W]
+        # 2D convolution layers
         self.conv2d_1 = nn.Conv2d(in_channels=hidden_dim, out_channels=hidden_dim // 2, kernel_size=3, padding=1)
         self.conv2d_2 = nn.Conv2d(in_channels=hidden_dim // 2, out_channels=output_channels, kernel_size=3, padding=1)
 
 
     def forward(self, x_enc):
-        """
-        Convert the input time series data into an image tensor.
-
-        Args:
-            x_enc (torch.Tensor): Input time series data, shape of [batch_size, seq_len, n_vars]
-
-        Returns:
-            torch.Tensor: Image tensor, shape of [B, output_channels, H, W]
-        """
+        """Convert input time series to image tensor [B, output_channels, H, W]"""
         B, L, D = x_enc.shape
         
-        # Generate periodicity encoding using sin and cos functions
-        time_steps = torch.arange(L, dtype=torch.float32).unsqueeze(0).repeat(B, 1).to(x_enc.device)  # shape [B, L]
-        
-        # Generate sin and cos components and ensure shape is [B, L, 2]
+        # Generate periodicity encoding (sin/cos)
+        time_steps = torch.arange(L, dtype=torch.float32).unsqueeze(0).repeat(B, 1).to(x_enc.device)
         periodicity_encoding = torch.cat([
             torch.sin(time_steps / self.periodicity * (2 * torch.pi)).unsqueeze(-1),
             torch.cos(time_steps / self.periodicity * (2 * torch.pi)).unsqueeze(-1)
-        ], dim=-1)  # shape [B, L, 2], periodicity encoding
+        ], dim=-1)
+        periodicity_encoding = periodicity_encoding.unsqueeze(-2).repeat(1, 1, D, 1)  # [B, L, D, 2]
         
-        # Repeat periodicity encoding across the feature dimension
-        periodicity_encoding = periodicity_encoding.unsqueeze(-2).repeat(1, 1, D, 1)  # shape [B, L, D, 2]
-        
-        # Concatenate the periodicity encoding for each variable to its corresponding time series data
-        x_enc = x_enc.unsqueeze(-1)  # shape [B, L, D, 1]
-        x_enc = torch.cat([x_enc, periodicity_encoding], dim=-1)  # shape [B, L, D, 3]
+        # FFT frequency encoding (magnitude)
+        x_fft = torch.fft.rfft(x_enc, dim=1)
+        x_fft_mag = torch.abs(x_fft)
+        if x_fft_mag.shape[1] < L:
+            pad = torch.zeros(B, L - x_fft_mag.shape[1], D, device=x_enc.device, dtype=x_fft_mag.dtype)
+            x_fft_mag = torch.cat([x_fft_mag, pad], dim=1)
+        x_fft_mag = x_fft_mag.unsqueeze(-1)  # [B, L, D, 1]
 
-        # Reshape the input to [B, D, 3, L] for the 1D convolution layer
-        x_enc = x_enc.permute(0, 2, 3, 1)  # shape [B, D, 3, L]
+        # Combine all features: raw + FFT + periodic
+        x_enc = x_enc.unsqueeze(-1)  # [B, L, D, 1]
+        x_enc = torch.cat([x_enc, x_fft_mag, periodicity_encoding], dim=-1)  # [B, L, D, 4]
 
-        # Apply 1D convolution to each variable separately
-        x_enc = x_enc.reshape(B * D, 3, L)  # shape [B * D, 3, L]
-        x_enc = self.conv1d(x_enc)  # shape [B * D, hidden_dim, L]
-        x_enc = x_enc.reshape(B, D, self.hidden_dim, L)  # shape [B, D, hidden_dim, L]
+        # Reshape for 1D convolution
+        x_enc = x_enc.permute(0, 2, 3, 1)  # [B, D, 4, L]
+        x_enc = x_enc.reshape(B * D, 4, L)  # [B*D, 4, L]
+        x_enc = self.conv1d(x_enc)  # [B*D, hidden_dim, L]
+        x_enc = x_enc.reshape(B, D, self.hidden_dim, L)  # [B, D, hidden_dim, L]
 
-        # 2D Convolution to convert [B, hidden_dim, D, L] to [B, output_channels, D, L]
-        x_enc = x_enc.permute(0, 2, 1, 3)  # [B, D, hidden_dim, L]
+        # 2D Convolution processing
+        x_enc = x_enc.permute(0, 2, 1, 3)  # [B, hidden_dim, D, L]
         x_enc = F.relu(self.conv2d_1(x_enc))
         x_enc = F.relu(self.conv2d_2(x_enc))
         
-        # Interpolate to the desired image size to get [B, output_channels, H, W]
+        # Resize to target image size
         x_enc = F.interpolate(x_enc, size=(self.image_size, self.image_size), mode='bilinear', align_corners=False)
         
-        return x_enc  # shape [B, output_channels, H, W]
+        return x_enc  # [B, output_channels, H, W]
 
 
 class MultiChannalLearnableTimeSeriesToImage(nn.Module):
-    """
-    Learnable module to convert time series data into image tensors.
-    """
+    """Learnable module to convert time series data into image tensors"""
+    
     def __init__(self, input_dim, hidden_dim, output_channels, image_size, periodicity):
         super(MultiChannalLearnableTimeSeriesToImage, self).__init__()
         self.input_dim = input_dim
@@ -147,65 +127,50 @@ class MultiChannalLearnableTimeSeriesToImage(nn.Module):
         self.image_size = image_size
         self.periodicity = periodicity
 
-        # 1D convolutional layer, used to transform [B, L, D] to [B, hidden_dim, L]
+        # 1D convolutional layer
         self.conv1d = nn.Conv1d(in_channels=input_dim, out_channels=hidden_dim, kernel_size=3, padding=1)
 
-        # 2D convolution layer, used to convert [B, hidden_dim, L] to [B, C, H, W]
+        # 2D convolution layers
         self.conv2d_1 = nn.Conv2d(in_channels=hidden_dim, out_channels=hidden_dim // 2, kernel_size=3, padding=1)
         self.conv2d_2 = nn.Conv2d(in_channels=hidden_dim // 2, out_channels=output_channels, kernel_size=3, padding=1)
 
 
     def forward(self, x_enc):
-        """
-        Convert the input time series data into an image tensor.
-
-        Args:
-            x_enc (torch.Tensor): Input time series data, shape of [batch_size, seq_len, n_vars]
-
-        Returns:
-            torch.Tensor: Image tensor, shape of [B, output_channels, H, W]
-        """
+        """Convert input time series to image tensor [B, output_channels, H, W]"""
         B, L, D = x_enc.shape
         
-        # Generate periodicity encoding using sin and cos functions
-        time_steps = torch.arange(L, dtype=torch.float32).unsqueeze(0).repeat(B, 1).to(x_enc.device)  # shape [B, L]
-        
-        # Generate sin and cos components and ensure shape is [B, L, 2]
+        # Generate periodicity encoding (sin/cos)
+        time_steps = torch.arange(L, dtype=torch.float32).unsqueeze(0).repeat(B, 1).to(x_enc.device)
         periodicity_encoding = torch.cat([
             torch.sin(time_steps / self.periodicity * (2 * torch.pi)).unsqueeze(-1),
             torch.cos(time_steps / self.periodicity * (2 * torch.pi)).unsqueeze(-1)
-        ], dim=-1)  # shape [B, L, 2], periodicity encoding
+        ], dim=-1)
+        periodicity_encoding = periodicity_encoding.unsqueeze(-2).repeat(1, 1, D, 1)  # [B, L, D, 2]
         
-        # Repeat periodicity encoding across the feature dimension
-        periodicity_encoding = periodicity_encoding.unsqueeze(-2).repeat(1, 1, D, 1)  # shape [B, L, D, 2]
-        
-        # Concatenate the periodicity encoding for each variable to its corresponding time series data
-        x_enc = x_enc.unsqueeze(-1)  # shape [B, L, D, 1]
-        x_enc = torch.cat([x_enc, periodicity_encoding], dim=-1)  # shape [B, L, D, 3]
+        # Combine raw data with periodic encoding
+        x_enc = x_enc.unsqueeze(-1)  # [B, L, D, 1]
+        x_enc = torch.cat([x_enc, periodicity_encoding], dim=-1)  # [B, L, D, 3]
 
-        # Reshape the input to [B, D, 3, L] for the 1D convolution layer
-        x_enc = x_enc.permute(0, 2, 3, 1)  # shape [B, D, 3, L]
-
-        # Apply 1D convolution to each variable separately
-        x_enc = x_enc.reshape(B * D, 3, L)  # shape [B * D, 3, L]
-        x_enc = self.conv1d(x_enc)  # shape [B * D, hidden_dim, L]
+        # Reshape for 1D convolution
+        x_enc = x_enc.permute(0, 2, 3, 1)  # [B, D, 3, L]
+        x_enc = x_enc.reshape(B * D, 3, L)  # [B*D, 3, L]
+        x_enc = self.conv1d(x_enc)  # [B*D, hidden_dim, L]
         
-        # Add channel dimension for 2D convolution to [B * D, hidden_dim, 1, L]
-        x_enc = x_enc.unsqueeze(2)  # shape [B * D, hidden_dim, 1, L]
+        # Add channel dimension for 2D processing
+        x_enc = x_enc.unsqueeze(2)  # [B*D, hidden_dim, 1, L]
         
-        # 2D Convolution to convert [B * D, hidden_dim, 1, L] to [B * D, output_channels, 1, L]
+        # 2D Convolution processing
         x_enc = F.relu(self.conv2d_1(x_enc))
         x_enc = F.relu(self.conv2d_2(x_enc))
         
-        # Interpolate to the desired image size to get [B * D, output_channels, H, W]
+        # Resize to target image size
         x_enc = F.interpolate(x_enc, size=(self.image_size, self.image_size), mode='bilinear', align_corners=False)
         
-        return x_enc  # shape [B * D, output_channels, H, W]
+        return x_enc  # [B*D, output_channels, H, W]
 
 class MultiscaleLearnableTimeSeriesToImage(nn.Module):
-    """
-    Enhanced learnable module to convert time series data into image tensors.
-    """
+    """Enhanced learnable module for time series to image conversion with multi-scale features"""
+    
     def __init__(self, input_dim, hidden_dim, output_channels, image_size, periodicity):
         super(MultiscaleLearnableTimeSeriesToImage, self).__init__()
         self.input_dim = input_dim
@@ -214,7 +179,7 @@ class MultiscaleLearnableTimeSeriesToImage(nn.Module):
         self.image_size = image_size
         self.periodicity = periodicity
 
-        # Multi-scale 1D convolutions with dilation
+        # Multi-scale 1D convolutions with different dilations
         self.conv1d_blocks = nn.ModuleList([
             nn.Sequential(
                 nn.Conv1d(input_dim, hidden_dim, kernel_size=3, padding=1, dilation=1),
@@ -226,13 +191,13 @@ class MultiscaleLearnableTimeSeriesToImage(nn.Module):
             ),
         ])
         
-        # Frequency domain features
+        # Frequency domain convolution
         self.fft_conv = nn.Conv1d(input_dim, hidden_dim, kernel_size=3, padding=1)
         
         # Residual connection
         self.residual = nn.Conv1d(input_dim, hidden_dim, kernel_size=1)
         
-        # 2D convolution with attention
+        # 2D convolution blocks
         self.conv2d_blocks = nn.ModuleList([
             nn.Sequential(
                 nn.Conv2d(hidden_dim, hidden_dim // 2, kernel_size=3, padding=1),
@@ -253,8 +218,8 @@ class MultiscaleLearnableTimeSeriesToImage(nn.Module):
         )
         self.conv2d_2 = nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1)
         
-        # Frequency processing components
-        self.dwt = DWTForward(J=1, wave='haar')  # Discrete wavelet transform
+        # Discrete wavelet transform
+        self.dwt = DWTForward(J=1, wave='haar')
         
         # Feature fusion layer
         self.feature_fusion = nn.Sequential(
@@ -263,160 +228,94 @@ class MultiscaleLearnableTimeSeriesToImage(nn.Module):
             nn.BatchNorm1d(hidden_dim)
         )
 
-        # Projection layer to adjust input channels for attention
+        # Projection layers
         self.proj_for_attention = nn.Conv2d(3, hidden_dim, kernel_size=1)
-        
-        # Final projection to output_channels
         self.final_proj_to_output = nn.Conv2d(hidden_dim, output_channels, kernel_size=1)
 
     def forward(self, x_enc):
-        """
-        Convert the input time series data into an image tensor.
-
-        Args:
-            x_enc (torch.Tensor): Input time series data, shape of [batch_size, seq_len, n_vars]
-
-        Returns:
-            torch.Tensor: Image tensor, shape of [B, output_channels, H, W]
-        """
+        """Convert input time series to image tensor [B, output_channels, H, W]"""
         B, L, D = x_enc.shape
         
-        # TimeSeriesVisualizer.plot_feature_maps(x_enc.unsqueeze(1), "0) Input Time Series") # Shape: [B, 1, L, D]
-
-        # Generate periodicity encoding using sin and cos functions
-        time_steps = torch.arange(L, dtype=torch.float32).unsqueeze(0).repeat(B, 1).to(x_enc.device)  # shape [B, L]
-        
-        # Generate sin and cos components and ensure shape is [B, L, 2]
+        # Generate periodicity encoding (sin/cos)
+        time_steps = torch.arange(L, dtype=torch.float32).unsqueeze(0).repeat(B, 1).to(x_enc.device)
         periodicity_encoding = torch.cat([
             torch.sin(time_steps / self.periodicity * (2 * torch.pi)).unsqueeze(-1),
             torch.cos(time_steps / self.periodicity * (2 * torch.pi)).unsqueeze(-1)
-        ], dim=-1)  # shape [B, L, 2], periodicity encoding
-        
-        # Repeat periodicity encoding across the feature dimension
-        periodicity_encoding = periodicity_encoding.unsqueeze(-2).repeat(1, 1, D, 1)  # shape [B, L, D, 2]
+        ], dim=-1)
+        periodicity_encoding = periodicity_encoding.unsqueeze(-2).repeat(1, 1, D, 1)  # [B, L, D, 2]
 
-        # TimeSeriesVisualizer.plot_feature_maps(periodicity_encoding.permute(0, 3, 1, 2), "1) Periodicity Encoding")    # Shape: [B, 2, L, D]
-        
-        # Concatenate the periodicity encoding for each variable to its corresponding time series data
-        x_enc = x_enc.unsqueeze(-1)  # shape [B, L, D, 1]
-        x_enc = torch.cat([x_enc, periodicity_encoding], dim=-1)  # shape [B, L, D, 3]
-        
-        # TimeSeriesVisualizer.plot_feature_maps(x_enc.permute(0, 3, 1, 2), "2) Input with Periodicity Encoding")  # Shape: [B, 3, L, D]
+        # Combine raw data with periodic encoding
+        x_enc = x_enc.unsqueeze(-1)  # [B, L, D, 1]
+        x_enc = torch.cat([x_enc, periodicity_encoding], dim=-1)  # [B, L, D, 3]
 
-        # Reshape the input to [B * D, 3, L] for the 1D convolution layer
+        # Reshape for multi-scale processing
         x_enc = x_enc.view(B * D, 3, L)
 
-        # Process through multi-scale 1D conv blocks
+        # Multi-scale 1D convolution features
         conv_features = []
         for conv_block in self.conv1d_blocks:
             conv_features.append(conv_block(x_enc))
         x_enc = torch.cat(conv_features, dim=1)  # Concatenate along channel dim
         
-        # print('x_enc after multi-scale conv:', x_enc.shape)
-        # TimeSeriesVisualizer.plot_feature_maps(x_enc.unsqueeze(1), "3) Conv1D Features")  # Shape: [B*D, 1, L, hidden_dim]
-
-        # Apply frequency domain processing
+        # Frequency domain processing
         freq_features = self.freq_processing(x_enc)
         
-        # print('freq_features:', freq_features.shape)
-        # TimeSeriesVisualizer.plot_feature_maps(freq_features.unsqueeze(1), "4) Frequency Features")  # Shape: [B*D, 1, L//2, C]
-        
-        # Downsample x_enc to match the sequence length of freq_features
-        x_enc_downsampled = x_enc[:, :, ::2]  # Shape: [B*D, C, L//2]
-        
-        # Feature fusion
+        # Downsample and fuse features
+        x_enc_downsampled = x_enc[:, :, ::2]  # Match freq feature length
         x_enc = torch.cat([x_enc_downsampled, freq_features], dim=1)
         x_enc = self.feature_fusion(x_enc)
 
-        # Reshape for 2D convolution [B * D, hidden_dim, 1, L]
-        x_enc = x_enc.unsqueeze(2)
+        # Prepare for 2D processing
+        x_enc = x_enc.unsqueeze(2)  # Add spatial dimension
 
-        # Process through 2D conv blocks with attention
+        # 2D convolution processing
         for conv2d_block in self.conv2d_blocks:
             x_enc = conv2d_block(x_enc)
         
-         # Adjust input channels for attention mechanism
-        x_enc = self.proj_for_attention(x_enc)  # Shape: [B*D, hidden_dim, 1, L//2]
-        
-        # Apply attention mechanism
+        # Attention mechanism
+        x_enc = self.proj_for_attention(x_enc)
         attention_map = self.attention(x_enc)
         x_enc = x_enc * attention_map  # Apply attention weights
 
-        # Final projection
+        # Final projection and resizing
         x_enc = self.final_proj(x_enc)
-        
-        # Project to output_channels
-        x_enc = self.final_proj_to_output(x_enc)  # Shape: [B*D, output_channels, H, W]
-        
-        # Interpolate to the desired image size to get [B, output_channels, H, W]
+        x_enc = self.final_proj_to_output(x_enc)
         x_enc = F.interpolate(x_enc, size=(self.image_size, self.image_size), mode='bilinear', align_corners=False)
         
-        # Reshape the output to [B * n_vars, output_channels, H, W]
-        x_enc = x_enc.view(B * D, self.output_channels, self.image_size, self.image_size)
+        # Reshape and average over variables
+        x_enc = x_enc.view(B, D, self.output_channels, self.image_size, self.image_size)
+        x_enc = x_enc.mean(dim=1)  # [B, output_channels, H, W]
                 
         return x_enc
 
     def freq_processing(self, x):
-        """
-        Process frequency domain features using FFT and wavelet transforms.
-        
-        Args:
-            x (torch.Tensor): Input tensor of shape [B*D, C, L]
-            
-        Returns:
-            torch.Tensor: Frequency features of shape [B*D, C//2, L]
-        """
+        """Process frequency domain features using FFT and wavelet transforms"""
         x = x.float()
         
-        # Apply FFT and take magnitude
+        # FFT magnitude features
         x_fft = torch.fft.rfft(x, dim=-1)
-        x_fft = torch.abs(x_fft)  # Shape: [B*D, C, L//2 + 1]
+        x_fft = torch.abs(x_fft)
+        x_fft = x_fft[..., :x.shape[2] // 2]  # Match wavelet feature length
         
-        # Truncate x_fft to match the sequence length of wavelet_features
-        x_fft = x_fft[..., :x.shape[2] // 2]  # Shape: [B*D, C, L//2]
-        
-        # Reshape for 2D wavelet transform [B*D, C, 1, L]
-        x_2d = x.unsqueeze(2)  # Shape: [B*D, C, 1, L]
-        
-        # Apply wavelet transform
+        # Wavelet transform features
+        x_2d = x.unsqueeze(2)
         cA, cD = self.dwt(x_2d)
-        cD_reshaped = cD[0].squeeze(3)  # Shape: [B*D, C, 3, L//2]
-
-        # Concatenate wavelet features along the feature dimension
-        wavelet_features = torch.cat([cA, cD_reshaped], dim=2)  # Shape: [B*D, C, 4, L//2]
+        cD_reshaped = cD[0].squeeze(3)  # [B*D, C, 3, L//2]
+        wavelet_features = torch.cat([cA, cD_reshaped], dim=2)  # [B*D, C, 4, L//2]
         
-        # Reshape x_fft to 4D by adding a singleton dimension
-        x_fft = x_fft.unsqueeze(2)  # Shape: [B*D, C, 1, L//2]
-        
-        # Expand x_fft to match the feature dimension of wavelet_features
-        x_fft = x_fft.expand(-1, -1, 4, -1)  # Shape: [B*D, C, 4, L//2]
+        # Match wavelet dimensions
+        x_fft = x_fft.unsqueeze(2)  # [B*D, C, 1, L//2]
+        x_fft = x_fft.expand(-1, -1, 4, -1)  # [B*D, C, 4, L//2]
         
         # Combine frequency features
-        freq_features = torch.cat([x_fft, wavelet_features], dim=2)  # Shape: [B*D, C + C, 4, L//2]
-        
-        # Reshape for Conv1d: Combine the second and third dimensions
-        freq_features = freq_features.view(freq_features.shape[0], -1, freq_features.shape[-1])  # Shape: [B*D, (C + C) * 4, L//2]
+        freq_features = torch.cat([x_fft, wavelet_features], dim=1)
+        freq_features = freq_features.view(freq_features.shape[0], -1, freq_features.shape[-1])
         
         return freq_features
 
 
     def final_proj(self, x):
-        """
-        Final projection layer before interpolation.
-        
-        Args:
-            x (torch.Tensor): Input tensor of shape [B*D, C, H, W]
-            
-        Returns:
-            torch.Tensor: Projected features of shape [B*D, output_channels, H, W]
-        """
-        # Apply 2D convolution with residual connection
+        """Final projection with residual connection"""
         identity = x
         x = self.conv2d_2(x)
-        x = x + identity  # Residual connection
-        return x
-        x = x + identity  # Residual connection
-        return x
-        return x
-        x = x + identity  # Residual connection
-        return x
+        return x + identity  # Residual connection
