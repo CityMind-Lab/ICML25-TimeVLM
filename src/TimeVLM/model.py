@@ -35,7 +35,7 @@ class PatchMemoryBank:
 
     def update(self, new_patches):
         """
-        Update the patch memory bank with new patches.
+        Update the patch memory bank with new patches using circular buffer strategy.
         
         Args:
             new_patches (Tensor): New patches to add to the memory bank.
@@ -45,8 +45,15 @@ class PatchMemoryBank:
         
         if self.ptr + n > self.max_size:
             # Wrap around if the memory bank is full
-            self.patches[self.ptr:] = new_patches_flat[:self.max_size - self.ptr]
-            self.ptr = 0
+            remaining_space = self.max_size - self.ptr
+            self.patches[self.ptr:] = new_patches_flat[:remaining_space]        
+            remaining_patches = n - remaining_space
+            if remaining_patches >= self.max_size:
+                self.patches[:] = new_patches_flat[-self.max_size:]
+                self.ptr = 0
+            else:
+                self.patches[:remaining_patches] = new_patches_flat[remaining_space:]
+                self.ptr = remaining_patches
         else:
             self.patches[self.ptr:self.ptr + n] = new_patches_flat
             self.ptr += n
