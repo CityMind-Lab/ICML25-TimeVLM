@@ -82,14 +82,14 @@ class PatchMemoryBank:
 
 class Model(nn.Module):
     """
-    Multimodal Time Series Prediction Model based on CLIP.
-    Processes image and text modalities for multimodal fusion and time series prediction.
+    Time-VLM model with image and text modalities for enhanced time series forecasting.
     """
     def __init__(self, config, **kwargs):
         super(Model, self).__init__()
         self.config = config
         self.vlm_manager = VLMManager(config)
         self.device = torch.device('cuda:{}'.format(self.config.gpu))
+        self.use_mem_gate = config.use_mem_gate
         
         # Initialize patch memory bank
         self.patch_memory_bank = PatchMemoryBank(
@@ -147,7 +147,16 @@ class Model(nn.Module):
             batch_first=True
         )
         
-        # Gating mechanism
+        # Memory fusion gate
+        if self.use_mem_gate:
+            self.memory_fusion_gate = nn.Sequential(
+                nn.Linear(config.d_model * 2, config.d_model),
+                nn.GELU(),
+                nn.Linear(config.d_model, 2),
+                nn.Softmax(dim=-1)
+            )
+
+        # Prediction fusion gate
         self.gate = nn.Sequential(
             nn.Linear(config.pred_len * 2, config.pred_len),
             nn.GELU(),
@@ -187,7 +196,6 @@ class Model(nn.Module):
         self.alpha = nn.Parameter(torch.tensor(0.5))  # Learnable gating parameter
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-
     def _compute_local_memory(self, patches):
         """Compute local memory by retrieving and fusing similar patches"""
         # Retrieve similar patches from memory bank
@@ -213,13 +221,14 @@ class Model(nn.Module):
             value=patches
         )
         
-        # Temporal pooling to get global context
-        global_memory = attn_output.mean(dim=1, keepdim=True)
-        
         # Update patch memory bank with current patches
         self.patch_memory_bank.update(patches.detach())
         
-        return global_memory
+        if self.use_mem_gate:
+            return attn_output  # Return full attention output for advanced gating
+        else:
+            # Return global context for simple gating (original behavior)
+            return attn_output.mean(dim=1, keepdim=True)
 
     def forward_prediction(self, x_enc, vision_embeddings, text_embeddings):
         B, L, n_vars = x_enc.shape
@@ -229,10 +238,22 @@ class Model(nn.Module):
         
         # 2. Compute local and global memory
         local_memory = self._compute_local_memory(patches)  # [B * n_vars, n_patches, d_model]
-        global_memory = self._compute_global_memory(patches)  # [B * n_vars, 1, d_model]
+        global_memory = self._compute_global_memory(patches)  # [B * n_vars, n_patches, d_model] or [B * n_vars, 1, d_model]
         
         # 3. Combine local and global memory
-        memory_features = local_memory + global_memory  # [B * n_vars, n_patches, d_model]
+        if self.use_mem_gate:
+            # Advanced memory fusion with gating
+            combined_features = torch.cat([local_memory, global_memory], dim=-1)  # [B * n_vars, n_patches, d_model*2]
+            gate_weights = self.memory_fusion_gate(combined_features)  # [B * n_vars, n_patches, 2]
+            
+            # Weighted fusion
+            memory_features = (
+                gate_weights[:, :, 0:1] * local_memory +
+                gate_weights[:, :, 1:2] * global_memory
+            )  # [B * n_vars, n_patches, d_model]
+        else:
+            # Simple addition (original behavior)
+            memory_features = local_memory + global_memory  # [B * n_vars, n_patches, d_model]
 
         # 4. Get temporal predictions
         memory_features = self.flatten(memory_features)  # [B * n_vars, head_nf]
@@ -279,6 +300,7 @@ class Model(nn.Module):
 
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, mask=None):
         B, L, D = x_enc.shape
+        x_enc = x_enc.to(self.device)
         
         # Normalize input
         x_enc, means, stdev = self._normalize_input(x_enc)

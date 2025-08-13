@@ -45,8 +45,18 @@ class VLMManager:
 
     def _init_clip(self):
         CLIP_ARCH = 'openai/clip-vit-base-patch32'
-        self.processor = CLIPProcessor.from_pretrained(CLIP_ARCH)
-        self.model = CLIPModel.from_pretrained(CLIP_ARCH, output_hidden_states=True)
+        try:
+            print("Trying to load from local cache...")
+            self.processor = CLIPProcessor.from_pretrained(CLIP_ARCH, local_files_only=True)
+            self.model = CLIPModel.from_pretrained(CLIP_ARCH, output_hidden_states=True, local_files_only=True)
+            print("Successfully loaded from local cache!")
+        except Exception as e:
+            print(f"Local cache not found: {e}")
+            print("Loading from remote...")
+            self.processor = CLIPProcessor.from_pretrained(CLIP_ARCH)
+            self.model = CLIPModel.from_pretrained(CLIP_ARCH, output_hidden_states=True)
+            print("Successfully loaded from remote!")
+        
         self._set_requires_grad(self.model, self.config.finetune_vlm)
         self.hidden_size = 512
         self.fusion_dim = self.hidden_size
@@ -61,8 +71,18 @@ class VLMManager:
 
     def _init_blip2(self):
         BLIP_ARCH = 'Salesforce/blip2-opt-2.7b'
-        self.processor = Blip2Processor.from_pretrained(BLIP_ARCH)
-        self.model = Blip2Model.from_pretrained(BLIP_ARCH, output_hidden_states=True)
+        try:
+            print("Trying to load BLIP2 from local cache...")
+            self.processor = Blip2Processor.from_pretrained(BLIP_ARCH, local_files_only=True)
+            self.model = Blip2Model.from_pretrained(BLIP_ARCH, output_hidden_states=True, local_files_only=True)
+            print("Successfully loaded BLIP2 from local cache!")
+        except Exception as e:
+            print(f"BLIP2 local cache not found: {e}")
+            print("Loading BLIP2 from remote...")
+            self.processor = Blip2Processor.from_pretrained(BLIP_ARCH)
+            self.model = Blip2Model.from_pretrained(BLIP_ARCH, output_hidden_states=True)
+            print("Successfully loaded BLIP2 from remote!")
+        
         self._set_requires_grad(self.model, self.config.finetune_vlm)
         self.hidden_size = 2560
         self.fusion_dim = self.hidden_size
@@ -71,8 +91,18 @@ class VLMManager:
 
     def _init_vilt(self):
         VILT_ARCH = "dandelin/vilt-b32-finetuned-coco"
-        self.processor = ViltProcessor.from_pretrained(VILT_ARCH)
-        self.model = ViltModel.from_pretrained(VILT_ARCH, output_hidden_states=True)
+        try:
+            print("Trying to load ViLT from local cache...")
+            self.processor = ViltProcessor.from_pretrained(VILT_ARCH, local_files_only=True)
+            self.model = ViltModel.from_pretrained(VILT_ARCH, output_hidden_states=True, local_files_only=True)
+            print("Successfully loaded ViLT from local cache!")
+        except Exception as e:
+            print(f"ViLT local cache not found: {e}")
+            print("Loading ViLT from remote...")
+            self.processor = ViltProcessor.from_pretrained(VILT_ARCH)
+            self.model = ViltModel.from_pretrained(VILT_ARCH, output_hidden_states=True)
+            print("Successfully loaded ViLT from remote!")
+        
         self._set_requires_grad(self.model, self.config.finetune_vlm)
         self.hidden_size = 768
         if self.config.w_out_query:

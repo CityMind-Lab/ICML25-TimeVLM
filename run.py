@@ -8,7 +8,7 @@ from exp.exp_imputation import Exp_Imputation
 from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
 from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification import Exp_Classification
-from utils.print_args import print_args, print_hyperparameters
+from utils.print_args import print_args
 from utils.tools import load_content
 import random
 import numpy as np
@@ -115,6 +115,7 @@ if __name__ == '__main__':
     parser.add_argument('--w_out_text', type=str2bool, default=False, help='without text part')
     parser.add_argument('--w_out_query', type=str2bool, default=False, help='without query part')
     parser.add_argument('--visualize_embeddings', type=str2bool, default=False, help='visualize embeddings')
+    parser.add_argument('--use_mem_gate', type=str2bool, default=False, help='use memory gate')
 
     # GPU
     parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
@@ -182,7 +183,6 @@ if __name__ == '__main__':
     
     # print arguments
     print_args(args)
-    print_hyperparameters(args)
 
     if args.task_name == 'long_term_forecast':
         Exp = Exp_Long_Term_Forecast
