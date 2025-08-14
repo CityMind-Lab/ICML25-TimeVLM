@@ -414,39 +414,36 @@ class Model(nn.Module):
         Save the generated images.
 
         Args:
-        - images: A tensor containing the images to be saved.
-        - batch_idx: Index of the current batch.
+        - images: A tensor containing the images to be saved with shape [B, C, H, W]
         """
         save_dir = "ts-images/timevlm"
         os.makedirs(save_dir, exist_ok=True)
+        
         for i, img_tensor in enumerate(images):
-            img_tensor = img_tensor.cpu().numpy().transpose(1, 2, 0) * 255  # Convert to [H, W, C] and scale to [0, 255]
-            img_tensor = img_tensor.astype(np.uint8)
-            img = Image.fromarray(img_tensor)
-            img.save(os.path.join(save_dir, f"image_{i}.png"))
-
-
-def check_image_channel(np_img):
-    """
-    Check the number of channels in an image and adjust the dimension order.
-
-    Args:
-    - np_img: Input image.
-
-    Returns:
-    - np_img: Adjusted image.
-    - mode: Image mode (e.g., 'RGB', 'L').
-    """
-    # Check channel count and adjust dimension order
-    if np_img.shape[0] == 3:
-        # RGB image: Convert from [C, H, W] to [H, W, C]
-        np_img = np.transpose(np_img, (1, 2, 0))  # [224, 224, 3]
-        mode = 'RGB'
-    elif np_img.shape[0] == 1:
-        # Grayscale image: Convert from [C, H, W] to [H, W]
-        np_img = np.squeeze(np_img, 0)  # [224, 224]
-        mode = 'L'
-    else:
-        print(f"Unexpected number of channels: {np_img.shape[0]} for image")
-
-    return np_img, mode
+            # Move to CPU and convert to numpy
+            img_tensor = img_tensor.cpu().numpy()
+            
+            # Check channel count and handle accordingly
+            if img_tensor.shape[0] == 3:
+                # RGB image: Convert from [C, H, W] to [H, W, C]
+                img_tensor = np.transpose(img_tensor, (1, 2, 0))
+                mode = 'RGB'
+            elif img_tensor.shape[0] == 1:
+                # Grayscale image: Convert from [C, H, W] to [H, W]
+                img_tensor = np.squeeze(img_tensor, 0)
+                mode = 'L'
+            else:
+                print(f"Warning: Unexpected number of channels {img_tensor.shape[0]} for image {i}. Skipping...")
+                continue
+            
+            # Ensure data type is uint8
+            if img_tensor.dtype != np.uint8:
+                img_tensor = img_tensor.astype(np.uint8)
+            
+            # Create PIL image and save
+            try:
+                img = Image.fromarray(img_tensor, mode=mode)
+                img.save(os.path.join(save_dir, f"image_{i}.png"))
+            except Exception as e:
+                print(f"Error saving image {i}: {e}")
+                continue
