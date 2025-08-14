@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false
 model_name=TimeVLM
 vlm_type=clip
-gpu=0
+gpu=1
 image_size=56
 norm_const=0.4
 three_channel_image=True
@@ -10,7 +10,7 @@ batch_size=32
 num_workers=32
 learning_rate=0.001
 seq_len=512
-percent=0.1
+percent=1
 train_epochs=15
 
 # Create logs directory if it doesn't exist
@@ -27,6 +27,7 @@ run_experiment() {
     local d_model=$5
     local use_mem_gate=$6
     local periodicity=$7
+    local dropout=$8
 
     # Determine task name based on percent
     local task_name="few_shot_forecast"
@@ -71,47 +72,48 @@ run_experiment() {
       --num_workers $num_workers \
       --vlm_type $vlm_type \
       --use_mem_gate $use_mem_gate \
+      --dropout $dropout \
       --percent $percent > $log_file
 }
 
 # ETTh1, n_vars=7, periodicity=24
-run_experiment ETTh1 ETTh1 7 96 64 True 24
-run_experiment ETTh1 ETTh1 7 192 64 True 24
-run_experiment ETTh1 ETTh1 7 336 64 True 24
-run_experiment ETTh1 ETTh1 7 720 64 True 24
+run_experiment ETTh1 ETTh1 7 96 64 False 24 0.2
+run_experiment ETTh1 ETTh1 7 192 64 False 24 0.2
+run_experiment ETTh1 ETTh1 7 336 64 True 24 0.2
+run_experiment ETTh1 ETTh1 7 720 64 False 24 0.2
 
 # ETTh2, n_vars=7, periodicity=24
-run_experiment ETTh2 ETTh2 7 96 64 True 24
-run_experiment ETTh2 ETTh2 7 192 128 True 24
-run_experiment ETTh2 ETTh2 7 336 256 True 24
-run_experiment ETTh2 ETTh2 7 720 512 True 24
+run_experiment ETTh2 ETTh2 7 96 64 False 24 0.2
+run_experiment ETTh2 ETTh2 7 192 64 False 24 0.2
+run_experiment ETTh2 ETTh2 7 336 64 False 24 0.2
+run_experiment ETTh2 ETTh2 7 720 64 False 24 0.2
 
 # ETTm1, n_vars=7, periodicity=96
 run_experiment ETTm1 ETTm1 7 96 64 True 96
-run_experiment ETTm1 ETTm1 7 192 128 True 96
-run_experiment ETTm1 ETTm1 7 336 256 True 96
-run_experiment ETTm1 ETTm1 7 720 512 True 96
+run_experiment ETTm1 ETTm1 7 192 64 True 96
+run_experiment ETTm1 ETTm1 7 336 32 True 96
+run_experiment ETTm1 ETTm1 7 720 32 True 96
 
 # ETTm2, n_vars=7, periodicity=96
-run_experiment ETTm2 ETTm2 7 96 64 True 96
-run_experiment ETTm2 ETTm2 7 192 128 True 96
-run_experiment ETTm2 ETTm2 7 336 256 True 96
-run_experiment ETTm2 ETTm2 7 720 512 True 96
+run_experiment ETTm2 ETTm2 7 96 32 True 96 0.2
+run_experiment ETTm2 ETTm2 7 192 32 True 96 0.2
+run_experiment ETTm2 ETTm2 7 336 32 True 96 0.2
+run_experiment ETTm2 ETTm2 7 720 32 True 96 0.2
 
 # Electricity, n_vars=321, periodicity=24
-run_experiment Electricity custom 321 96 128 True 24
-run_experiment Electricity custom 321 192 128 True 24
-run_experiment Electricity custom 321 336 256 True 24
-run_experiment Electricity custom 321 720 512 True 24
+run_experiment Electricity custom 321 96 128 True 24 0.3
+run_experiment Electricity custom 321 192 128 True 24 0.3
+run_experiment Electricity custom 321 336 256 True 24 0.3
+run_experiment Electricity custom 321 720 512 True 24 0.3
 
 # Traffic, n_vars=862, periodicity=24
-run_experiment Traffic custom 862 96 128 True 24
-run_experiment Traffic custom 862 192 128 True 24
-run_experiment Traffic custom 862 336 256 True 24
-run_experiment Traffic custom 862 720 512 True 24
+run_experiment Traffic custom 862 96 128 True 24 0.1
+run_experiment Traffic custom 862 192 128 True 24 0.1
+run_experiment Traffic custom 862 336 256 True 24 0.1
+run_experiment Traffic custom 862 720 512 True 24 0.1
 
 # Weather, n_vars=21, periodicity=144
-run_experiment Weather custom 21 96 128 True 144
-run_experiment Weather custom 21 192 128 True 144
-run_experiment Weather custom 21 336 256 True 144
-run_experiment Weather custom 21 720 512 True 144
+run_experiment Weather custom 21 96 64 True 144 0.1
+run_experiment Weather custom 21 192 64 True 144 0.1
+run_experiment Weather custom 21 336 128 True 144 0.1
+run_experiment Weather custom 21 720 64 True 144 0.1

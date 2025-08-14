@@ -47,8 +47,11 @@ Place the downloaded data in the `./dataset` folder.
 Run the following scripts for different forecasting tasks:
 
 ```bash
-# Long-term Forecasting (Full-shot)
-bash ./scripts/TimeVLM_long.sh
+# Long-term Forecasting (Full-shot, 100% data)
+bash ./scripts/TimeVLM_long_1.0p.sh
+
+# Long-term Forecasting (Few-shot, 10% data)
+bash ./scripts/TimeVLM_long_0.1p.sh
 
 # Short-term Forecasting
 bash ./scripts/TimeVLM_short.sh
@@ -60,6 +63,7 @@ bash ./scripts/TimeVLM_transfer.sh
 > **⚠️ Important Notes**: 
 > - Ensure you have downloaded the datasets and placed them in the correct directory
 > - The default parameters provided in scripts are a good starting point, but you need to adjust them based on your specific dataset and requirements
+> - **Script Naming Convention**: `TimeVLM_long_X.Xp.sh` where `X.Xp` indicates the percentage of data used (e.g., `1.0p` = 100%, `0.1p` = 10%)
 
 ## 📁 Project Structure
 
@@ -75,7 +79,8 @@ Time-VLM/
 │   ├── Traffic/              # Traffic dataset
 │   └── ...
 ├── scripts/                  # Training and evaluation scripts
-│   ├── TimeVLM_long.sh      # Long-term forecasting (full-shot)
+│   ├── TimeVLM_long_1.0p.sh # Long-term forecasting (full-shot, 100% data)
+│   ├── TimeVLM_long_0.1p.sh # Long-term forecasting (few-shot, 10% data)
 │   ├── TimeVLM_short.sh     # Short-term forecasting
 │   ├── TimeVLM_transfer.sh  # Zero-shot transfer learning
 │   └── ...
@@ -109,14 +114,6 @@ Time-VLM/
 | **`periodicity`** | `24` | `-` | Data periodicity for image generation |
 | **`norm_const`** | `0.4` | `0.1-1.0` | Normalization constant |
 
-### Parameter Tuning Guidelines
-
-- **`d_model`**: 
-  - Long-term forecasting or larger datasets: try 256/512
-  - Smaller datasets: 32/64/128 is sufficient
-- **`use_amp`**: Enable for mixed precision training
-- **`num_workers`**: Adjust based on CPU cores
-
 ### Script Parameters
 
 | Parameter | Default | Description |
@@ -130,13 +127,6 @@ Time-VLM/
 | **`three_channel_image`** | `True` | Generate RGB images |
 | **`learnable_image`** | `True` | Learnable image generation |
 
-### Usage Modes
-
-| Learning Type | `percent` Value | Task Name |
-|:-------------:|:---------------:|:---------:|
-| **Full-shot Learning** | `1.0` | `long_term_forecast` |
-| **Few-shot Learning** | `< 1.0` | `few_shot_forecast` |
-| **Zero-shot Learning** | `-` | `zero_shot_forecast` |
 
 ## 📚 Citation
 

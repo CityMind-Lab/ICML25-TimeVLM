@@ -55,12 +55,13 @@ run_short_term_experiment() {
       --learning_rate $learning_rate \
       --num_workers $num_workers \
       --vlm_type $vlm_type \
+      --dropout 0.1 \
       --use_mem_gate $use_mem_gate > $log_file
 }
 
-run_short_term_experiment 'Yearly' 1 32 True
-run_short_term_experiment 'Quarterly' 4 32 True
-run_short_term_experiment 'Monthly' 3 32 True
-run_short_term_experiment 'Weekly' 4 32 True
-run_short_term_experiment 'Daily' 1 32 True
-run_short_term_experiment 'Hourly' 24 64 True
+run_short_term_experiment 'Yearly' 1 128 True
+run_short_term_experiment 'Quarterly' 4 128 True
+run_short_term_experiment 'Monthly' 3 128 True
+run_short_term_experiment 'Weekly' 4 128 True
+run_short_term_experiment 'Daily' 1 128 True
+run_short_term_experiment 'Hourly' 24 128 True
