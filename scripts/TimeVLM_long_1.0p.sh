@@ -77,22 +77,22 @@ run_experiment() {
 }
 
 # ETTh1, n_vars=7, periodicity=24
-run_experiment ETTh1 ETTh1 7 96 64 False 24 0.2
-run_experiment ETTh1 ETTh1 7 192 64 False 24 0.2
-run_experiment ETTh1 ETTh1 7 336 64 True 24 0.2
-run_experiment ETTh1 ETTh1 7 720 64 False 24 0.2
+run_experiment ETTh1 ETTh1 7 96 32 False 24 0.1
+run_experiment ETTh1 ETTh1 7 192 32 False 24 0.1
+run_experiment ETTh1 ETTh1 7 336 64 True 24 0.1
+run_experiment ETTh1 ETTh1 7 720 256 True 24 0.3
 
 # ETTh2, n_vars=7, periodicity=24
 run_experiment ETTh2 ETTh2 7 96 64 False 24 0.2
-run_experiment ETTh2 ETTh2 7 192 64 False 24 0.2
-run_experiment ETTh2 ETTh2 7 336 64 False 24 0.2
-run_experiment ETTh2 ETTh2 7 720 64 False 24 0.2
+run_experiment ETTh2 ETTh2 7 192 64 False 24 0.3
+run_experiment ETTh2 ETTh2 7 336 128 False 24 0.3
+run_experiment ETTh2 ETTh2 7 720 32 False 24 0.3
 
 # ETTm1, n_vars=7, periodicity=96
-run_experiment ETTm1 ETTm1 7 96 64 True 96
-run_experiment ETTm1 ETTm1 7 192 64 True 96
-run_experiment ETTm1 ETTm1 7 336 32 True 96
-run_experiment ETTm1 ETTm1 7 720 32 True 96
+run_experiment ETTm1 ETTm1 7 96 64 True 96 0.2
+run_experiment ETTm1 ETTm1 7 192 32 True 96 0.2
+run_experiment ETTm1 ETTm1 7 336 128 True 96 0.3
+run_experiment ETTm1 ETTm1 7 720 32 True 96 0.2
 
 # ETTm2, n_vars=7, periodicity=96
 run_experiment ETTm2 ETTm2 7 96 32 True 96 0.2
@@ -101,10 +101,10 @@ run_experiment ETTm2 ETTm2 7 336 32 True 96 0.2
 run_experiment ETTm2 ETTm2 7 720 32 True 96 0.2
 
 # Electricity, n_vars=321, periodicity=24
-run_experiment Electricity custom 321 96 128 True 24 0.3
-run_experiment Electricity custom 321 192 128 True 24 0.3
-run_experiment Electricity custom 321 336 256 True 24 0.3
-run_experiment Electricity custom 321 720 512 True 24 0.3
+run_experiment Electricity custom 321 96 128 True 24 0.1
+run_experiment Electricity custom 321 192 128 True 24 0.1
+run_experiment Electricity custom 321 336 256 True 24 0.1
+run_experiment Electricity custom 321 720 64 True 24 0.1
 
 # Traffic, n_vars=862, periodicity=24
 run_experiment Traffic custom 862 96 128 True 24 0.1
